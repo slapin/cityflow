@@ -66,8 +66,9 @@ func _fixed_process(dt):
 	label.add_text(" target: " + str(target))
 	label.add_text(" dval: " + str(dval))
 	label.add_text(" car state: "+ str(car.state))
-#	label.add_text(" speed: " +str(car.speed))
-	label.add_text(" steering: [" + str(car.st) + " " + str(car.get_steering()) + " " + str(steer) + " (" + str(steerv) + ")]")
+	label.add_text(" speed: " +str(car.speed))
+#	label.add_text(" steering: [" + str(car.st) + " " + str(car.get_steering()) + " " + str(steer) + " (" + str(steerv) + ")]")
+	label.add_text(" st: " + str(car.st))
 	label.add_text("\n")
 	car.dval = dval
 	if loc.distance_squared_to(target) < 9.0:

@@ -12,6 +12,8 @@ onready var col_left = get_node("col-left")
 onready var col_right = get_node("col-right")
 onready var col_ground = get_node("col-ground")
 onready var vel = get_translation()
+onready var col_left_side = get_node("col-left-side")
+onready var col_right_side = get_node("col-right-side")
 var oldvel = Vector3()
 
 const SPEEDING = 0
@@ -25,10 +27,12 @@ var state = IDLE
 var steer_correct = 0.9
 var steer_nav = 0.9
 
-var speed_max = 80.0
-var speed_min = 30.0
+var speed_max = 40.0
+var speed_min = 20.0
+var max_accel = 15.0
 var correction_speed_max = 30
 var correction_speed_min = 6.0
+var correction_accel_max = 2.0
 
 var orig_force = 0.0
 onready var olddir = get_transform().basis[2]
@@ -41,7 +45,7 @@ func _ready():
 	set_fixed_process(true)
 
 func slow_collide():
-	for h in [col_slow, col_slow_left, col_slow_right]:
+	for h in [col_slow_left, col_slow_right]:
 		if h.is_colliding():
 			var ob = h.get_collider()
 			if ob extends StaticBody:
@@ -96,16 +100,13 @@ func switch_state(s):
 			set_brake(1.0)
 #			print("stop")
 		elif s == SLOWING:
-			set_steering(0.0)
-			set_engine_force(40.0)
-			set_brake(1.0)
+			pass
 		elif s == SPEEDING:
-			set_steering(0.0)
-			set_brake(0.0)
+			pass
 		elif s == CORRECTING:
 #			print("correcting")
 			set_steering(0)
-			set_brake(0.0)
+#			set_brake(0.0)
 		elif s in [CORRECT_LEFT, CORRECT_RIGHT]:
 			set_engine_force(0)
 			set_steering(0.0)
@@ -120,6 +121,7 @@ var dval = 0.0
 var oldsign = -1
 var speed = 0.0
 var st = 0.0
+var old_speed = 0.0
 func _fixed_process(dt):
 	var oldv = vel
 	vel = get_translation()
@@ -129,36 +131,75 @@ func _fixed_process(dt):
 	direction.y = 0
 	var ef = get_engine_force()
 	st = get_steering()
+	var dv = abs(speed - old_speed)
 	if state in [SPEEDING, SLOWING]:
+		if col_slow.is_colliding():
+			set_brake(1.0)
+		else:
+			set_brake(0.0)
 		if check_contacts():
-			switch_state(CORRECTING)
-		if abs(dval) > 0.001:
-			st = steer_nav * dval
-#			print(get_name() + ": dval:", dval)
+			st = 0.0
+			if col_slow_left.is_colliding():
+				st += 1.0
+			elif col_left.is_colliding():
+				st += 0.5
+			if col_slow_right.is_colliding():
+				st -= 1.0
+			elif col_right.is_colliding():
+				st -= 0.5
+			if col_left_side.is_colliding():
+				st += 0.5
+			if col_right_side.is_colliding():
+				st -= 0.5
+			if st == 0.0:
+				if col_slow.is_colliding():
+					var hv = col_slow.get_collision_normal()
+					if hv.x < 0.0:
+						st = -1.0
+					elif hv.x > 0.0:
+						st = 1.0
+#					var tc = TestCube.new()
+#					add_child(tc)
+#					tc.set_scale(Vector3(0.1, 0.1, 0.1))
+#					tc.set_translation(hv)
+#					print(hv)
+			st = clamp(st, -1.0, 1.0)
 			set_steering(st)
 		else:
-			st = 0.0
-			set_steering(st)
+			if abs(dval) > 0.001:
+				st = steer_nav * dval
+#				print(get_name() + ": dval:", dval)
+				set_steering(st)
+			else:
+				st = 0.0
+				set_steering(st)
 			
 	if state == SPEEDING:
-		if speed > speed_max:
-			ef = ef * 0.5
+		if ground_collide():
+			st = clamp(st, -1.0, 1.0)
+			if speed > speed_max * (1.0 - abs(st) / 2.0) or dv > max_accel * (1.0 - abs(st) / 2.0):
+				ef = ef * 0.5
+			else:
+				ef = ef + 0.2
+				ef = ef * 1.1
+#			if abs(dval) > 0.001 and ef > 40.0:
+#				ef = ef * 0.8
+			set_engine_force(ef)
 		else:
-			ef = ef + 0.2
-			ef = ef * 1.1
-		if abs(dval) > 0.001 and ef > 40.0:
-			ef = ef * 0.8
-		set_engine_force(ef)
-		if not ground_collide():
-			switch_state(SLOWING)
+			switch_state(STOPPED)
+			set_engine_force(0.0)
+			set_brake(1.0)
 	elif state == SLOWING:
-		if speed < speed_min and not slow_collide():
+		if speed < speed_min:
+			set_brake(0.0)
+			set_engine_force(40.0)
 			switch_state(SPEEDING)
 		else:
+			set_brake(1.0)
 			ef = 0.0
 			set_engine_force(ef)
 	elif state == CORRECTING:
-		if speed > correction_speed_max:
+		if speed > correction_speed_max or dv > correction_accel_max:
 			ef = 0.0
 		elif speed < correction_speed_min:
 			ef = ef + 0.1
@@ -206,9 +247,9 @@ func _fixed_process(dt):
 				
 	elif state == CORRECT_LEFT:
 		print(get_name(), ": correcting left")
-		if speed > correction_speed_max:
+		if speed > correction_speed_max or dv > correction_accel_max:
 			ef = 0.0
-		elif speed < correction_speed_min:
+		elif speed < correction_speed_min and dv <= correction_accel_max:
 			ef = ef + 0.1
 			ef = ef * 1.1
 		st = steer_correct
@@ -218,9 +259,9 @@ func _fixed_process(dt):
 			switch_state(SLOWING)
 	elif state == CORRECT_RIGHT:
 		print(get_name(), ": correcting right")
-		if speed > correction_speed_max:
+		if speed > correction_speed_max or dv > correction_accel_max:
 			ef = 0.0
-		elif speed < correction_speed_min:
+		elif speed < correction_speed_min and dv <= correction_accel_max:
 			ef = ef + 0.1
 			ef = ef * 1.1
 		st = -steer_correct

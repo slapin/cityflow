@@ -11,7 +11,7 @@ onready var roll = get_rotation()
 onready var spawn_col = get_node("col")
 onready var target = get_node("target")
 
-var car_limit = 500
+var car_limit = 80
 func spawn_car():
 	var car_inst = car.instance()
 	get_parent().add_child(car_inst)
@@ -23,7 +23,7 @@ func spawn_car():
 	return car_inst
 
 var car_array = []
-var life_time = 60.0
+var life_time = 200.0
 
 func _ready():
 	# Called every time the node is added to the scene.
@@ -34,7 +34,7 @@ func _ready():
 	set_fixed_process(true)
 
 
-var spawn_period = 0.1
+var spawn_period = 2.0
 var pass_time = spawn_period
 onready var navnode = get_parent().get_node("nav")
 
